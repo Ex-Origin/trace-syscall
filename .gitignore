@@ -1,0 +1,3 @@
+trace_write
+trace_read
+trace_execve
