@@ -1,3 +1,8 @@
 trace_write
 trace_read
 trace_execve
+ttw
+ttr
+tte
+*.zip
+*.tar.gz
