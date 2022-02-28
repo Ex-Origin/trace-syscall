@@ -19,7 +19,7 @@ Trace `SYS_write` and `SYS_wirtev` to show the files that are being written by t
 
 ```shell
 $ gcc -g -D TRACE_WRITE   main.c -o trace_write
-$ trace_write
+$ ./trace_write
 Usage: ./trace_write command
 $ ./trace_write pip install requests
 [TRACE INFO]: pipe:[508966]
