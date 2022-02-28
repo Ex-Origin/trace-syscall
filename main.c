@@ -54,30 +54,36 @@ int handle_file_IO(int pid, struct ptrace_syscall_info *info)
     memset(path_buf, 0, sizeof(path_buf));
     snprintf(path_buf, sizeof(path_buf) - 1, "/proc/%d/fd/%lld", pid, info->entry.args[0]);
     memset(path, 0, sizeof(path));
-    readlink(path_buf, path, sizeof(path) - 1);
-    existed = 0;
-    for (i = 0; existed == 0 && i < node_count; i++)
+    if (readlink(path_buf, path, sizeof(path) - 1) != -1)
     {
-        if (strcmp(path, path_lists[i]) == 0)
+        existed = 0;
+        for (i = 0; existed == 0 && i < node_count; i++)
         {
-            existed = 1;
+            if (strcmp(path, path_lists[i]) == 0)
+            {
+                existed = 1;
+            }
+        }
+        if (existed == 0)
+        {
+            // Extend
+            if (node_count + 1 > node_max)
+            {
+                result = realloc(path_lists, sizeof(char *) * node_max * 2);
+                CHECK(result != NULL);
+                node_max = node_max * 2;
+                path_lists = (char **)result;
+            }
+            result = strdup(path);
+            CHECK(result != NULL);
+            path_lists[node_count] = result;
+            node_count++;
+            printf("[TRACE INFO]: %s\n", path);
         }
     }
-    if (existed == 0)
+    else
     {
-        // Extend
-        if (node_count + 1 > node_max)
-        {
-            result = realloc(path_lists, sizeof(char *) * node_max * 2);
-            CHECK(result != NULL);
-            node_max = node_max * 2;
-            path_lists = (char **)result;
-        }
-        result = strdup(path);
-        CHECK(result != NULL);
-        path_lists[node_count] = result;
-        node_count++;
-        printf("[TRACE INFO]: %s\n", path);
+        fprintf(stderr, "[TRACE ERROR]: pid %5d : readlink(%s) error : %m\n", pid, path_buf);
     }
 
     return 0;
@@ -140,7 +146,7 @@ int handle_execve(int pid, struct ptrace_syscall_info *info)
         }
     }
 
-    // Ouput command
+    // Output command
     for (i = 0; i < node_count; i++)
     {
         if (node_count == 1 && i == 0) // Only one
