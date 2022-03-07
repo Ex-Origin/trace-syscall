@@ -5,6 +5,8 @@ Trace SYScall to reach the expected requirements.
 
 It is only supported for Linux.
 
+> It uses **PTRACE_GET_SYSCALL_INFO** (since Linux 5.3) to retrieve information about the system call that caused the stop.
+
 ## Compile
 
 ```shell
