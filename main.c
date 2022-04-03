@@ -137,6 +137,37 @@ int handle_file_IO(int pid, struct ptrace_syscall_info *info)
 #endif
 
 #ifdef TRACE_EXECVE
+int handle_double_quotation(char *out, char *in, int size)
+{
+    int i = 0, j = 0;
+
+    out[i++] = '"';
+    for(j = 0; in[j] && j < size && i < size ; j++)
+    {
+        switch (in[j])
+        {
+        case '"':
+            if(i < size) out[i++] = '\\';
+            if(i < size) out[i++] = in[j];
+            break;
+        
+        default:
+            if(i < size) out[i++] = in[j];
+            break;
+        }
+    }
+
+    if(i < size)
+    {
+        out[i++] = '"';
+    }
+    else
+    {
+        return -1;
+    }
+
+    return 0;
+}
 int handle_execve(int pid, struct ptrace_syscall_info *info)
 {
     char buf[0x1000];
@@ -174,8 +205,18 @@ int handle_execve(int pid, struct ptrace_syscall_info *info)
                 args_lists = (char **)result;
             }
 
-            result = strdup(buf);
-            CHECK(result != NULL);
+            if(strchr(buf, ' ') == NULL)
+            {
+                result = strdup(buf);
+                CHECK(result != NULL);
+            }
+            else
+            {
+                result = malloc(sizeof(buf));
+                CHECK(result != NULL);
+                memset(result, 0, sizeof(buf));
+                handle_double_quotation(result, buf, sizeof(buf));
+            }
 
             args_lists[node_count] = result;
             node_count++;
