@@ -15,6 +15,8 @@
 #include <sys/prctl.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <sys/ioctl.h>
 
 // Show more information
 #ifdef DEBUG
@@ -35,6 +37,43 @@
             abort();                                            \
         }                                                       \
     }
+
+#define TTY_WORKED  1
+#define TTY_NONE 2
+#define TTY_ERROR 3
+int tty_status = 0;
+
+int check_tty()
+{
+    int result;
+    int session_id;
+
+    result = ioctl(STDOUT_FILENO, TIOCGSID, &session_id);
+    if(result != -1)
+    {
+        DPRINTF("[TRACE DEBUG]: TTY terminal\n");
+        tty_status = TTY_WORKED;
+        result = 0;
+    }
+    else
+    {
+        if(errno == ENOTTY)
+        {
+            DPRINTF("[TRACE DEBUG]: ENOTTY\n");
+            tty_status = TTY_NONE;
+            result = 0;
+        }
+        else
+        {
+            DPRINTF("[TRACE DEBUG]: Error\n");
+            fprintf(stderr, "[TRACE ERROR]: ioctl %m  %s:%d\n", __FILE__, __LINE__);
+            tty_status = TTY_ERROR;
+            result = -1;
+        }
+    }
+    
+    return result;
+}
 
 #if (defined(TRACE_WRITE) || defined(TRACE_READ))
 int handle_file_IO(int pid, struct ptrace_syscall_info *info)
@@ -78,7 +117,14 @@ int handle_file_IO(int pid, struct ptrace_syscall_info *info)
             CHECK(result != NULL);
             path_lists[node_count] = result;
             node_count++;
-            printf("[TRACE INFO]: %s\n", path);
+            if(tty_status == TTY_WORKED)
+            {
+                printf("\033[1;32m[TRACE INFO]: %s\033[0m\n", path);
+            }
+            else
+            {
+                printf("[TRACE INFO]: %s\n", path);
+            }
         }
     }
     else
@@ -151,15 +197,36 @@ int handle_execve(int pid, struct ptrace_syscall_info *info)
     {
         if (node_count == 1 && i == 0) // Only one
         {
-            printf("[TRACE INFO]: %s\n", args_lists[i]);
+            if(tty_status == TTY_WORKED)
+            {
+                printf("\033[1;32m[TRACE INFO]: %s\033[0m\n", args_lists[i]);
+            }
+            else
+            {
+                printf("[TRACE INFO]: %s\n", args_lists[i]);
+            }
         }
         else if (i == 0) // The head node
         {
-            printf("[TRACE INFO]: %s ", args_lists[i]);
+            if(tty_status == TTY_WORKED)
+            {
+                printf("\033[1;32m[TRACE INFO]: %s ", args_lists[i]);
+            }
+            else
+            {
+                printf("[TRACE INFO]: %s ", args_lists[i]);
+            }
         }
         else if (i + 1 == node_count) // The final node
         {
-            printf("%s\n", args_lists[i]);
+            if(tty_status == TTY_WORKED)
+            {
+                printf("%s\033[0m\n", args_lists[i]);
+            }
+            else
+            {
+                printf("%s\n", args_lists[i]);
+            }
         }
         else // Middle nodes
         {
@@ -276,7 +343,7 @@ int handle_trapped_event(int pid, int wstatus)
         DPRINTF("[TRACE DEBUG]: pid %5d : trapped by event PTRACE_EVENT_STOP\n", pid);
         break;
     default:
-        fprintf(stderr, "[TRACE ERROR]: pid %5d : trapped by unknown event %d (%#x)\n", event, event);
+        fprintf(stderr, "[TRACE ERROR]: pid %5d : trapped by unknown event %d (%#x)\n", pid, event, event);
         break;
     }
     return 0;
@@ -285,9 +352,15 @@ int handle_trapped_event(int pid, int wstatus)
 int handle_syscall_info(int pid, int wstatus)
 {
     struct ptrace_syscall_info info;
-    // CHECK(ptrace(PTRACE_GET_SYSCALL_INFO, pid, sizeof(info), &info) != -1);
-    for (; ptrace(PTRACE_GET_SYSCALL_INFO, pid, sizeof(info), &info) == -1;)
+
+    for(errno = 0; ptrace(PTRACE_GET_SYSCALL_INFO, pid, sizeof(info), &info) == -1 && errno == ESRCH;)
         ;
+    if(errno != 0 && errno != ESRCH)
+    {
+        fprintf(stderr, "[TRACE ERROR]: pid %5d : ptrace(PTRACE_GET_SYSCALL_INFO) error: %m\n", pid);
+        return -1;
+    }
+    
     switch (info.op)
     {
     case PTRACE_SYSCALL_INFO_NONE:
@@ -304,7 +377,7 @@ int handle_syscall_info(int pid, int wstatus)
         DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_SECCOMP\n", pid);
         break;
     default:
-        fprintf(stderr, "[TRACE ERROR]: pid %5d : got unknown info %d (%#x)\n", info.op, info.op);
+        fprintf(stderr, "[TRACE ERROR]: pid %5d : got unknown info %d (%#x)\n", pid, info.op, info.op);
         break;
     }
     return 0;
@@ -316,9 +389,11 @@ int handle_stopped_signal(int pid, int wstatus)
     {
     case SIGINT:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGINT\n", pid);
+        ptrace(PTRACE_KILL, pid);
         break;
     case SIGILL:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGILL\n", pid);
+        ptrace(PTRACE_KILL, pid);
         break;
     case SIGABRT:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGABRT\n", pid);
@@ -333,6 +408,7 @@ int handle_stopped_signal(int pid, int wstatus)
         break;
     case SIGTERM:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGTERM\n", pid);
+        ptrace(PTRACE_KILL, pid);
         break;
     case SIGHUP:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGHUP\n", pid);
@@ -376,7 +452,7 @@ int handle_stopped_signal(int pid, int wstatus)
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGURG\n", pid);
         break;
     case SIGSTOP:
-        printf("[TRACE INFO]: pid %5d : stopped by signal SIGSTOP\n", pid);
+        DPRINTF("[TRACE DEBUG]: pid %5d : stopped by signal SIGSTOP\n", pid);
         break;
     case SIGTSTP:
         printf("[TRACE INFO]: pid %5d : stopped by signal SIGTSTP\n", pid);
@@ -423,15 +499,10 @@ int handle_stopped_signal(int pid, int wstatus)
         handle_syscall_info(pid, wstatus);
         break;
     default:
-        fprintf(stderr, "[TRACE ERROR]: pid %5d : stopped by unknown signal %d (%#x)\n",
+        fprintf(stderr, "[TRACE ERROR]: pid %5d : stopped by unknown signal %d (%#x)\n", pid,
                 WSTOPSIG(wstatus), WSTOPSIG(wstatus));
         break;
     }
-
-    // Continue the process
-    // CHECK(ptrace(PTRACE_SYSCALL, pid, NULL, 0) != -1);
-    for (; ptrace(PTRACE_SYSCALL, pid, NULL, 0) == -1;)
-        ;
 
     return 0;
 }
@@ -550,8 +621,8 @@ int main(int argc, char **argv)
     size_t point_max = 0x400, point_count = 0;
     char **point;
 
-    setbuf(stdout, NULL);
-    setbuf(stderr, NULL);
+    check_tty();
+    setlinebuf(stdout);
 
     if (argc < 2)
     {
@@ -585,12 +656,16 @@ int main(int argc, char **argv)
                      PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC |
                      PTRACE_O_TRACEEXIT) != -1);
 
-    // Waiting for the situation that child process is ready.
-    for (; ptrace(PTRACE_SYSCALL, pid, NULL, 0) == -1;)
-        ;
-
-    for (pid = wait(&wstatus); pid != -1; pid = wait(&wstatus))
+    for (wstatus = 0; pid != -1; wstatus = 0)
     {
+        if(ptrace(PTRACE_SYSCALL, pid, 0, 0) == -1)
+        {
+            // Wait 
+            CHECK(errno == ESRCH);
+        }
+
+        pid = wait(&wstatus);
+        
         if (WIFEXITED(wstatus))
         {
             DPRINTF("[TRACE DEBUG]: pid %5d : exited, status=%d\n", pid, WEXITSTATUS(wstatus));
