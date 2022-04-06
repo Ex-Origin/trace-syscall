@@ -119,7 +119,7 @@ int handle_file_IO(int pid, struct ptrace_syscall_info *info)
             node_count++;
             if(tty_status == TTY_WORKED)
             {
-                printf("\033[1;32m[TRACE INFO]: %s\033[0m\n", path);
+                printf("[TRACE INFO]: \033[1;32m%s\033[0m\n", path);
             }
             else
             {
@@ -240,7 +240,7 @@ int handle_execve(int pid, struct ptrace_syscall_info *info)
         {
             if(tty_status == TTY_WORKED)
             {
-                printf("\033[1;32m[TRACE INFO]: %s\033[0m\n", args_lists[i]);
+                printf("[TRACE INFO]: \033[1;32m%s\033[0m\n", args_lists[i]);
             }
             else
             {
@@ -251,7 +251,7 @@ int handle_execve(int pid, struct ptrace_syscall_info *info)
         {
             if(tty_status == TTY_WORKED)
             {
-                printf("\033[1;32m[TRACE INFO]: %s ", args_lists[i]);
+                printf("[TRACE INFO]: \033[1;32m%s ", args_lists[i]);
             }
             else
             {
