@@ -408,11 +408,11 @@ int handle_syscall_info(int pid, int wstatus)
         DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_NONE\n", pid);
         break;
     case PTRACE_SYSCALL_INFO_ENTRY:
-        DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_ENTRY\n", pid);
+        DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_ENTRY(%lld)\n", pid, info.entry.nr);
         syscall_monitor(pid, &info);
         break;
     case PTRACE_SYSCALL_INFO_EXIT:
-        DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_EXIT\n", pid);
+        DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_EXIT(%lld)\n", pid, info.exit.rval);
         break;
     case PTRACE_SYSCALL_INFO_SECCOMP:
         DPRINTF("[TRACE DEBUG]: pid %5d : got info PTRACE_SYSCALL_INFO_SECCOMP\n", pid);
